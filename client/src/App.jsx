@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import AuthScreen from "./components/AuthScreen";
-import { authApi, documentsApi } from "./services/api";
+import { authApi, documentsApi, adminApi } from "./services/api";
 
 const navItems = [
   { label: "Overview", icon: LayoutDashboard },
@@ -33,7 +33,33 @@ function formatFileSize(bytes = 0) {
 
 function formatUpdated(date) {
   if (!date) return "—";
-  return new Date(date).toLocaleDateString();
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "—";
+  }
+
+  return parsedDate.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatTimestamp(date) {
+  if (!date) return "Time unavailable";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Time unavailable";
+  }
+
+  return parsedDate.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export default function App() {
@@ -45,6 +71,19 @@ export default function App() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  const [shareDocument, setShareDocument] = useState(null);
+  const [shareEmail, setShareEmail] = useState("");
+  const [sharePermission, setSharePermission] = useState("read");
+  const [sharing, setSharing] = useState(false);
+
+  const [permissions, setPermissions] = useState([]);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [revokingUserId, setRevokingUserId] = useState("");
+
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [auditError, setAuditError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -83,10 +122,32 @@ export default function App() {
       loadDocuments();
     } else {
       setDocuments([]);
+      setPermissions([]);
+      setAuditEvents([]);
     }
   }, [user]);
 
-  const visibleDocuments = documents.filter((doc) => {
+  const getOwnerId = (doc) =>
+    String(doc.owner?._id || doc.owner?.id || doc.owner || "");
+
+  const currentUserId = String(user?._id || user?.id || "");
+
+  const ownedDocuments = documents.filter(
+    (doc) => currentUserId && getOwnerId(doc) === currentUserId
+  );
+
+  const sharedDocuments = documents.filter(
+    (doc) => currentUserId && getOwnerId(doc) !== currentUserId
+  );
+
+  const currentDocuments =
+    activeNav === "Shared with me"
+      ? sharedDocuments
+      : activeNav === "My documents"
+        ? ownedDocuments
+        : documents;
+
+  const visibleDocuments = currentDocuments.filter((doc) => {
     const query = search.toLowerCase();
 
     return (
@@ -95,6 +156,27 @@ export default function App() {
       (doc.category || "").toLowerCase().includes(query)
     );
   });
+
+  async function loadAuditEvents() {
+    if (user?.role !== "admin") {
+      setAuditEvents([]);
+      setAuditError("Audit activity is available to administrators only.");
+      return;
+    }
+
+    setLoadingAudit(true);
+    setAuditError("");
+
+    try {
+      const result = await adminApi.audit({ limit: 50 });
+      setAuditEvents(result.events || []);
+    } catch (error) {
+      setAuditEvents([]);
+      setAuditError(error.message || "Unable to load audit activity.");
+    } finally {
+      setLoadingAudit(false);
+    }
+  }
 
   async function handleUpload(event) {
     const file = event.target.files?.[0];
@@ -136,12 +218,96 @@ export default function App() {
     }
   }
 
+  async function handleShare(event) {
+    event.preventDefault();
+
+    if (!shareDocument || !shareEmail.trim()) return;
+
+    setSharing(true);
+
+    try {
+      await documentsApi.share(
+        shareDocument._id,
+        shareEmail.trim(),
+        sharePermission
+      );
+
+      setNotice("Document access granted successfully.");
+      setShareEmail("");
+
+      await loadPermissions(shareDocument._id);
+      await loadDocuments();
+    } catch (error) {
+      setNotice(error.message || "Could not share document.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function loadPermissions(documentId) {
+    setLoadingPermissions(true);
+
+    try {
+      const result = await documentsApi.permissions(documentId);
+      setPermissions(result.permissions || []);
+    } catch (error) {
+      setPermissions([]);
+      setNotice(error.message || "Could not load document permissions.");
+    } finally {
+      setLoadingPermissions(false);
+    }
+  }
+
+  async function handleRevokePermission(documentId, targetUserId) {
+    const confirmed = window.confirm(
+      "Revoke this user's access to the document?"
+    );
+
+    if (!confirmed) return;
+
+    setRevokingUserId(targetUserId);
+
+    try {
+      await documentsApi.revoke(documentId, targetUserId);
+      setNotice("Document access revoked successfully.");
+      await loadPermissions(documentId);
+      await loadDocuments();
+    } catch (error) {
+      setNotice(error.message || "Could not revoke document access.");
+    } finally {
+      setRevokingUserId("");
+    }
+  }
+
+  async function handleDeleteDocument(doc) {
+    if (!window.confirm(`Delete "${doc.title || doc.originalName}"?`)) {
+      return;
+    }
+
+    try {
+      await documentsApi.remove(doc._id);
+      setNotice("Document deleted.");
+
+      if (shareDocument?._id === doc._id) {
+        setShareDocument(null);
+        setPermissions([]);
+      }
+
+      await loadDocuments();
+    } catch (error) {
+      setNotice(error.message || "Could not delete document.");
+    }
+  }
+
   async function handleLogout() {
     try {
       await authApi.logout();
       setUser(null);
       setDocuments([]);
+      setPermissions([]);
+      setAuditEvents([]);
       setActiveNav("Overview");
+      setShareDocument(null);
       setNotice("");
     } catch (error) {
       setNotice(error.message || "Logout failed.");
@@ -182,7 +348,9 @@ export default function App() {
           href="#home"
           onClick={() => setActiveNav("Overview")}
         >
-          <span className="brand-mark"><ShieldCheck size={23} /></span>
+          <span className="brand-mark">
+            <ShieldCheck size={23} />
+          </span>
           <span>
             trustvault
             <small>SECURE WORKSPACE</small>
@@ -199,6 +367,17 @@ export default function App() {
               onClick={() => {
                 setActiveNav(label);
                 setNotice("");
+
+                if (label === "Audit activity") {
+                  if (user?.role === "admin") {
+                    loadAuditEvents();
+                  } else {
+                    setAuditEvents([]);
+                    setAuditError(
+                      "Audit activity is available to administrators only."
+                    );
+                  }
+                }
               }}
             >
               <Icon size={18} />
@@ -209,7 +388,9 @@ export default function App() {
 
         <div className="sidebar-bottom">
           <div className="security-card">
-            <span className="security-icon"><LockKeyhole size={18} /></span>
+            <span className="security-icon">
+              <LockKeyhole size={18} />
+            </span>
             <strong>Your files, protected.</strong>
             <p>
               Access controls and audit history help keep sensitive
@@ -244,8 +425,12 @@ export default function App() {
           <div className="breadcrumb">
             Workspace <span>/</span> <strong>{activeNav}</strong>
           </div>
+
           <div className="top-actions">
-            <span className="environment-pill"><span /> Connected</span>
+            <span className="environment-pill">
+              <span /> Connected
+            </span>
+
             <button
               className="icon-button"
               aria-label="Notifications"
@@ -253,6 +438,7 @@ export default function App() {
             >
               <Bell size={19} />
             </button>
+
             <div className="avatar small-avatar">
               {(user.name || "U").slice(0, 1).toUpperCase()}
             </div>
@@ -266,11 +452,13 @@ export default function App() {
                 <span className="eyebrow-line" />
                 PRIVATE DOCUMENT MANAGEMENT
               </div>
+
               <h1>
                 {activeNav === "Overview"
                   ? "Your workspace, secured."
                   : activeNav}
               </h1>
+
               <p className="subtitle">
                 {activeNav === "Overview"
                   ? "Keep important documents organized, shared intentionally, and accountable."
@@ -281,6 +469,7 @@ export default function App() {
             <label className="primary-button">
               <Plus size={18} />
               {uploading ? "Uploading…" : "Upload document"}
+
               <input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
@@ -302,9 +491,15 @@ export default function App() {
             <article className="stat-card">
               <div className="stat-top">
                 <span>Total documents</span>
-                <span className="stat-icon blue"><Files size={18} /></span>
+                <span className="stat-icon blue">
+                  <Files size={18} />
+                </span>
               </div>
-              <div className="stat-number">{documents.length.toString().padStart(2, "0")}</div>
+
+              <div className="stat-number">
+                {documents.length.toString().padStart(2, "0")}
+              </div>
+
               <div className="stat-foot">
                 <span className="foot-neutral">
                   <LockKeyhole size={13} /> Account data
@@ -315,129 +510,391 @@ export default function App() {
 
             <article className="stat-card">
               <div className="stat-top">
-                <span>Shared documents</span>
-                <span className="stat-icon purple"><Share2 size={18} /></span>
+                <span>Shared with me</span>
+                <span className="stat-icon purple">
+                  <Share2 size={18} />
+                </span>
               </div>
-              <div className="stat-number">—</div>
+
+              <div className="stat-number">
+                {sharedDocuments.length.toString().padStart(2, "0")}
+              </div>
+
               <div className="stat-foot">
-                <span className="foot-neutral">Not yet counted</span>
-                <span>Access grants</span>
+                <span className="foot-neutral">Shared access</span>
+                <span>Received documents</span>
               </div>
             </article>
 
             <article className="stat-card">
               <div className="stat-top">
                 <span>Security events</span>
-                <span className="stat-icon green"><Activity size={18} /></span>
+                <span className="stat-icon green">
+                  <Activity size={18} />
+                </span>
               </div>
-              <div className="stat-number">—</div>
+
+              <div className="stat-number">
+                {user?.role === "admin"
+                  ? auditEvents.length.toString().padStart(2, "0")
+                  : "—"}
+              </div>
+
               <div className="stat-foot">
-                <span className="foot-neutral">Admin-only API</span>
-                <span>Audit records</span>
+                <span className="foot-neutral">
+                  {user?.role === "admin" ? "Administrator" : "Restricted"}
+                </span>
+                <span>
+                  {user?.role === "admin"
+                    ? "Loaded audit events"
+                    : "Admin-only records"}
+                </span>
               </div>
             </article>
           </div>
 
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>
-                  {activeNav === "Overview"
-                    ? "Recent documents"
-                    : activeNav}
-                </h2>
-                <p>Your document library at a glance</p>
-              </div>
-              <button
-                className="text-button"
-                onClick={() => setActiveNav("My documents")}
-              >
-                View library <ArrowUpRight size={15} />
-              </button>
-            </div>
+          {activeNav !== "Audit activity" && (
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>
+                    {activeNav === "Overview"
+                      ? "Recent documents"
+                      : activeNav}
+                  </h2>
 
-            <div className="toolbar">
-              <div className="search-box">
-                <Search size={17} />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search documents or categories..."
-                />
-              </div>
-              <button
-                className="filter-button"
-                onClick={() => setNotice("Use search to find documents by title or category.")}
-              >
-                All documents <span>?</span>
-              </button>
-            </div>
+                  <p>
+                    {activeNav === "Shared with me"
+                      ? "Documents other users have shared with you"
+                      : activeNav === "My documents"
+                        ? "Documents you own"
+                        : "Your document library at a glance"}
+                  </p>
+                </div>
 
-            <div className="document-table">
-              <div className="table-head">
-                <span>DOCUMENT NAME</span>
-                <span>CATEGORY</span>
-                <span>DATE ADDED</span>
-                <span>SIZE</span>
-                <span>ACTION</span>
+                <button
+                  className="text-button"
+                  onClick={() => setActiveNav("My documents")}
+                >
+                  View library <ArrowUpRight size={15} />
+                </button>
               </div>
 
-              {loadingDocs ? (
-                <div className="empty-state">Loading your documents…</div>
-              ) : visibleDocuments.length ? (
-                visibleDocuments.map((doc) => (
-                  <div className="document-row" key={doc._id}>
-                    <div className="file-name">
-                      <span className={`file-icon ${doc.mimeType?.startsWith("image/") ? "image-file" : ""}`}>
-                        {doc.mimeType?.startsWith("image/")
-                          ? <ImageIcon size={18} />
-                          : <FileText size={18} />}
-                      </span>
-                      <span>
-                        <strong>{doc.title || doc.originalName}</strong>
-                        <small>{doc.originalName}</small>
-                      </span>
+              <div className="toolbar">
+                <div className="search-box">
+                  <Search size={17} />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search documents or categories..."
+                  />
+                </div>
+
+                <button
+                  className="filter-button"
+                  onClick={() =>
+                    setNotice("Use search to find documents by title or category.")
+                  }
+                >
+                  All documents <span>?</span>
+                </button>
+              </div>
+
+              {shareDocument && (
+                <div className="share-panel">
+                  <form className="share-form" onSubmit={handleShare}>
+                    <h3>
+                      Share {shareDocument.title || shareDocument.originalName}
+                    </h3>
+
+                    <label>
+                      User email
+                      <input
+                        type="email"
+                        value={shareEmail}
+                        onChange={(event) => setShareEmail(event.target.value)}
+                        placeholder="colleague@example.com"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Permission
+                      <select
+                        value={sharePermission}
+                        onChange={(event) =>
+                          setSharePermission(event.target.value)
+                        }
+                      >
+                        <option value="read">Can view and download</option>
+                        <option value="edit">
+                          Can view, download and edit details
+                        </option>
+                      </select>
+                    </label>
+
+                    <div className="share-form-actions">
+                      <button
+                        type="submit"
+                        className="primary-button"
+                        disabled={sharing}
+                      >
+                        {sharing ? "Sharing..." : "Grant access"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => {
+                          setShareDocument(null);
+                          setPermissions([]);
+                        }}
+                      >
+                        Cancel
+                      </button>
                     </div>
-                    <span className="category-tag">{doc.category}</span>
-                    <span className="updated">
-                      <Clock3 size={14} /> {formatUpdated(doc.createdAt)}
-                    </span>
-                    <span className="file-size">{formatFileSize(doc.sizeBytes)}</span>
-                    <button
-                      className="text-button"
-                      onClick={() => handleDownload(doc)}
-                    >
-                      Download
-                    </button>
+                  </form>
+
+                  <div className="permission-list">
+                    <h4>People with access</h4>
+
+                    {loadingPermissions ? (
+                      <p>Loading permissions...</p>
+                    ) : permissions.length === 0 ? (
+                      <p>No other users currently have access.</p>
+                    ) : (
+                      permissions.map((grant) => (
+                        <div className="permission-row" key={grant.user.id}>
+                          <div>
+                            <strong>
+                              {grant.user.name || grant.user.email}
+                            </strong>
+                            <small>{grant.user.email}</small>
+                            <span className="permission-badge">
+                              {grant.permission === "edit"
+                                ? "Edit access"
+                                : "Read access"}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="text-button danger-button"
+                            disabled={revokingUserId === grant.user.id}
+                            onClick={() =>
+                              handleRevokePermission(
+                                shareDocument._id,
+                                grant.user.id
+                              )
+                            }
+                          >
+                            {revokingUserId === grant.user.id
+                              ? "Revoking..."
+                              : "Revoke"}
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))
-              ) : (
-                <div className="empty-state">
-                  {search
-                    ? "No matching documents. Try another search."
-                    : "No documents found. Upload a document to get started."}
                 </div>
               )}
-            </div>
 
-            <div className="panel-footer">
-              <span>Documents loaded from your TrustVault account</span>
-              <button onClick={loadDocuments}>
-                Refresh <ArrowUpRight size={14} />
-              </button>
-            </div>
-          </section>
+              <div className="document-table">
+                <div className="table-head">
+                  <span>DOCUMENT NAME</span>
+                  <span>CATEGORY</span>
+                  <span>DATE ADDED</span>
+                  <span>SIZE</span>
+                  <span>ACTION</span>
+                </div>
+
+                {loadingDocs ? (
+                  <div className="empty-state">Loading your documents…</div>
+                ) : visibleDocuments.length ? (
+                  visibleDocuments.map((doc) => {
+                    const isOwner = getOwnerId(doc) === currentUserId;
+
+                    return (
+                      <div className="document-row" key={doc._id}>
+                        <div className="file-name">
+                          <span
+                            className={`file-icon ${
+                              doc.mimeType?.startsWith("image/")
+                                ? "image-file"
+                                : ""
+                            }`}
+                          >
+                            {doc.mimeType?.startsWith("image/") ? (
+                              <ImageIcon size={18} />
+                            ) : (
+                              <FileText size={18} />
+                            )}
+                          </span>
+
+                          <span>
+                            <strong>{doc.title || doc.originalName}</strong>
+                            <small>{doc.originalName}</small>
+
+                            {!isOwner && (
+                              <small>
+                                Shared by{" "}
+                                {doc.owner?.name ||
+                                  doc.owner?.email ||
+                                  "Another user"}
+                              </small>
+                            )}
+                          </span>
+                        </div>
+
+                        <span className="category-tag">{doc.category}</span>
+
+                        <span className="updated">
+                          <Clock3 size={14} /> {formatUpdated(doc.createdAt)}
+                        </span>
+
+                        <span className="file-size">
+                          {formatFileSize(doc.sizeBytes)}
+                        </span>
+
+                        <div className="document-actions">
+                          <button
+                            className="text-button"
+                            onClick={() => handleDownload(doc)}
+                          >
+                            Download
+                          </button>
+
+                          {isOwner && (
+                            <>
+                              <button
+                                className="text-button"
+                                onClick={() => {
+                                  setShareDocument(doc);
+                                  setShareEmail("");
+                                  setSharePermission("read");
+                                  setPermissions([]);
+                                  loadPermissions(doc._id);
+                                }}
+                              >
+                                Share
+                              </button>
+
+                              <button
+                                className="text-button danger-button"
+                                onClick={() => handleDeleteDocument(doc)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="empty-state">
+                    {search
+                      ? "No matching documents. Try another search."
+                      : "No documents found. Upload a document to get started."}
+                  </div>
+                )}
+              </div>
+
+              <div className="panel-footer">
+                <span>Documents loaded from your TrustVault account</span>
+                <button onClick={loadDocuments}>
+                  Refresh <ArrowUpRight size={14} />
+                </button>
+              </div>
+            </section>
+          )}
+
+          {activeNav === "Audit activity" && (
+            <section className="panel audit-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Audit activity</h2>
+                  <p>Security events recorded by TrustVault.</p>
+                </div>
+
+                {user?.role === "admin" && (
+                  <button
+                    className="text-button"
+                    onClick={loadAuditEvents}
+                    disabled={loadingAudit}
+                  >
+                    {loadingAudit ? "Refreshing..." : "Refresh"}
+                  </button>
+                )}
+              </div>
+
+              {user?.role !== "admin" ? (
+                <div className="empty-state">
+                  Audit activity is available to administrators only.
+                </div>
+              ) : loadingAudit ? (
+                <div className="empty-state">Loading audit records...</div>
+              ) : auditError ? (
+                <div className="empty-state">{auditError}</div>
+              ) : auditEvents.length === 0 ? (
+                <div className="empty-state">
+                  No audit events are available yet.
+                </div>
+              ) : (
+                <div className="audit-list">
+                  {auditEvents.map((event) => (
+                    <article className="audit-row" key={event.id}>
+                      <div className="audit-event-icon">
+                        <Activity size={18} />
+                      </div>
+
+                      <div className="audit-event-details">
+                        <strong>
+                          {(event.action || "Unknown action").replaceAll(
+                            "_",
+                            " "
+                          )}
+                        </strong>
+
+                        <span>
+                          {event.actor?.name ||
+                            event.actor?.email ||
+                            "Unknown user"}
+                          {" · "}
+                          {event.resourceType || "Resource"}
+                        </span>
+
+                        <small>{formatTimestamp(event.createdAt)}</small>
+                      </div>
+
+                      <span
+                        className={`audit-outcome outcome-${
+                          event.outcome || "unknown"
+                        }`}
+                      >
+                        {event.outcome || "Unknown"}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="bottom-grid">
             <section className="mini-panel">
               <div className="mini-title">
-                <span className="mini-icon"><ShieldCheck size={17} /></span>
+                <span className="mini-icon">
+                  <ShieldCheck size={17} />
+                </span>
                 <h3>Access, by design</h3>
               </div>
+
               <p>
                 Document permissions are checked by the server on every
                 protected request.
               </p>
+
               <span className="mini-link">
                 Permission-aware architecture <ArrowUpRight size={14} />
               </span>
@@ -445,17 +902,21 @@ export default function App() {
 
             <section className="mini-panel">
               <div className="mini-title">
-                <span className="mini-icon violet"><Activity size={17} /></span>
+                <span className="mini-icon violet">
+                  <Activity size={17} />
+                </span>
                 <h3>Audit trail</h3>
               </div>
+
               <p>
                 Audit records are available through the protected admin API.
               </p>
+
               <button
                 className="mini-link"
-                onClick={() => setNotice("Audit activity is restricted to administrators and is not yet displayed here.")}
+                onClick={() => setActiveNav("Audit activity")}
               >
-                Audit access information <ArrowUpRight size={14} />
+                View audit activity <ArrowUpRight size={14} />
               </button>
             </section>
           </div>

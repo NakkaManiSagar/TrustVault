@@ -104,6 +104,9 @@ export const documentsApi = {
       body: JSON.stringify(metadata),
     }),
 
+  permissions: (documentId) =>
+    apiRequest(`/api/documents/${encodeURIComponent(documentId)}/permissions`),
+
   share: (documentId, email, permission) =>
     apiRequest(
       `/api/documents/${encodeURIComponent(documentId)}/permissions`,
@@ -143,4 +146,3 @@ export const adminApi = {
 export const healthApi = {
   check: () => apiRequest("/api/health"),
 };
-

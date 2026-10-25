@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
@@ -8,9 +7,7 @@ import Document from "../models/Document.js";
 import DocumentPermission from "../models/DocumentPermission.js";
 import User from "../models/User.js";
 import { requireAuth } from "../middleware/authenticate.js";
-import {
-  requireDocumentPermission,
-} from "../middleware/authorizeDocument.js";
+import { requireDocumentPermission } from "../middleware/authorizeDocument.js";
 import { createAuditLog } from "../services/auditService.js";
 import {
   uploadObject,
@@ -375,7 +372,6 @@ router.patch(
         });
       }
 
-      // Save the current values so we can compensate if auditing fails.
       const originalValues = {
         title: req.document.title,
         category: req.document.category,
@@ -404,7 +400,6 @@ router.patch(
           outcome: "success",
         });
       } catch (auditError) {
-        // Best-effort rollback; this is not an atomic transaction.
         await Document.updateOne(
           { _id: req.document._id },
           { $set: originalValues }
@@ -420,6 +415,38 @@ router.patch(
           category: req.document.category,
           description: req.document.description,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// List access grants. Only the document owner may view them.
+router.get(
+  "/:documentId/permissions",
+  requireDocumentPermission("owner"),
+  async (req, res, next) => {
+    try {
+      const grants = await DocumentPermission.find({
+        document: req.document._id,
+      })
+        .populate("user", "name email")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      return res.json({
+        permissions: grants
+          .filter((grant) => grant.user)
+          .map((grant) => ({
+            user: {
+              id: grant.user._id,
+              name: grant.user.name,
+              email: grant.user.email,
+            },
+            permission: grant.permission,
+            createdAt: grant.createdAt,
+          })),
       });
     } catch (error) {
       next(error);
@@ -559,7 +586,6 @@ router.delete(
         });
       }
 
-      // Mark it inaccessible before attempting storage cleanup.
       document.deletedAt = new Date();
       await document.save();
 
@@ -570,7 +596,6 @@ router.delete(
         outcome: "success",
       });
 
-      // A cleanup failure leaves an inaccessible orphan for later cleanup.
       await deleteObject(document.storageKey);
 
       return res.status(204).end();
