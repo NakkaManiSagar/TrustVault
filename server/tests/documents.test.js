@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 
 import app from "../src/app.js";
 import User from "../src/models/User.js";
@@ -20,7 +20,7 @@ import AuditLog from "../src/models/AuditLog.js";
 let mongo;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
   await mongoose.connect(mongo.getUri());
 });
 

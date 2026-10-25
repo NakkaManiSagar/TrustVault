@@ -12,7 +12,7 @@ import app from "../src/app.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "node:crypto";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 
 import User from "../src/models/User.js";
 import PasswordResetToken from "../src/models/PasswordResetToken.js";
@@ -49,7 +49,7 @@ async function createResetToken(user, options = {}) {
 }
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
   await mongoose.connect(mongo.getUri());
 });
 

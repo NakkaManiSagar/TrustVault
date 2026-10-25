@@ -1,15 +1,8 @@
-
-import {
-  beforeAll,
-  afterAll,
-  afterEach,
-  describe,
-  it,
-  expect,
-} from "vitest";
+import { beforeAll, afterAll, afterEach, describe, it, expect } from "vitest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import AuditLog from "../src/models/AuditLog.js";
+import AuditChainState from "../src/models/AuditChainState.js";
 import {
   createAuditLog,
   verifyAuditChain,
@@ -18,12 +11,18 @@ import {
 let mongo;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({
+    replSet: {
+      count: 1,
+      storageEngine: "wiredTiger",
+    },
+  });
+
   await mongoose.connect(mongo.getUri());
 });
-
 afterEach(async () => {
   await AuditLog.deleteMany({});
+  await AuditChainState.deleteMany({});
 });
 
 afterAll(async () => {
@@ -71,7 +70,7 @@ describe("Audit trail security", () => {
 
     await AuditLog.updateOne(
       { _id: entry._id },
-      { $set: { details: { filename: "tampered.pdf" } } }
+      { $set: { details: { filename: "tampered.pdf" } } },
     );
 
     const result = await verifyAuditChain();
@@ -101,8 +100,8 @@ describe("Audit trail security", () => {
           action: "ACCESS_DENIED",
           outcome: "denied",
           details: { attempt: index },
-        })
-      )
+        }),
+      ),
     );
 
     const result = await verifyAuditChain();
@@ -123,7 +122,7 @@ describe("Audit trail security", () => {
         createAuditLog({
           action: "DOCUMENT_UPLOAD",
           outcome: "success",
-        })
+        }),
       ).rejects.toThrow("Simulated audit storage failure");
     } finally {
       AuditLog.create = originalCreate;
