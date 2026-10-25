@@ -1,4 +1,3 @@
-
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -11,7 +10,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import { verifyRequestOrigin } from "./middleware/verifyRequestOrigin.js";
 
 const app = express();
-
+app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(helmet());
 
@@ -21,7 +20,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "X-CSRF-Token"],
-  })
+  }),
 );
 
 app.use(express.json({ limit: "100kb" }));
@@ -40,7 +39,7 @@ const sessionOptions = {
   cookie: {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
     maxAge: 8 * 60 * 60 * 1000,
     path: "/",
   },
@@ -66,20 +65,14 @@ app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/admin", adminRoutes);
 app.get("/api/health", (req, res) => {
-
   res.json({
     status: "ok",
     service: "TrustVault API",
   });
 });
-app.get(
-  "/api/admin/check",
-  requireAuth,
-  requireRole("admin"),
-  (req, res) => {
-    res.json({ message: "Admin access granted" });
-  }
-);
+app.get("/api/admin/check", requireAuth, requireRole("admin"), (req, res) => {
+  res.json({ message: "Admin access granted" });
+});
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
@@ -92,9 +85,7 @@ app.use((err, req, res, next) => {
 
   res.status(err.status || 500).json({
     error:
-      err.status && err.status < 500
-        ? err.message
-        : "Internal server error",
+      err.status && err.status < 500 ? err.message : "Internal server error",
   });
 });
 
