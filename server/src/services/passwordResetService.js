@@ -1,4 +1,3 @@
-
 import { randomBytes, createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
@@ -162,8 +161,8 @@ export async function resetPassword(token, newPassword) {
       $set: { usedAt: new Date() },
     },
     {
-      returnDocument: "after"
-    }
+      returnDocument: "after",
+    },
   );
 
   if (!resetRecord) {
@@ -180,8 +179,8 @@ export async function resetPassword(token, newPassword) {
       await PasswordResetToken.deleteOne({ _id: resetRecord._id });
       return false;
     }
-
     user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
     await user.save();
 
     // Remove all reset tokens belonging to this user.

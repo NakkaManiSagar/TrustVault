@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -34,8 +33,13 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    sessionVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false },
 );
 
 export default mongoose.model("User", userSchema);

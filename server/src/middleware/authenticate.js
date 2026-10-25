@@ -3,7 +3,10 @@ import User from "../models/User.js";
 
 export async function requireAuth(req, res, next) {
   try {
-    if (!req.session?.userId) {
+    if (
+      !req.session?.userId ||
+      !Number.isInteger(req.session.authVersion)
+    ) {
       return res.status(401).json({
         error: "Authentication required",
       });
@@ -12,9 +15,12 @@ export async function requireAuth(req, res, next) {
     const user = await User.findOne({
       _id: req.session.userId,
       active: true,
-    }).select("_id name email role");
+    }).select("_id name email role sessionVersion");
 
-    if (!user) {
+    if (
+      !user ||
+      (user.sessionVersion ?? 0) !== req.session.authVersion
+    ) {
       return res.status(401).json({
         error: "Session is no longer valid",
       });

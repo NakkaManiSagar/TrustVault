@@ -123,6 +123,7 @@ router.post("/login", async (req, res, next) => {
       if (error) return next(error);
 
       req.session.userId = user._id.toString();
+      req.session.authVersion = user.sessionVersion ?? 0;
 
       req.session.save((saveError) => {
         if (saveError) return next(saveError);
