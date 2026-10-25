@@ -9,6 +9,37 @@
   --text: #e8eef8;
   --accent: #77a9ff;
   --accent-bg: #1a3458;
+
+  --topbar: #0e1726;
+  --text-strong: #dce6f6;
+  --text-secondary: #94a3ba;
+  --hover-bg: #152237;
+  --active-bg: #172b47;
+  --active-border: #24456f;
+  --input-bg: var(--panel);
+  --card-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --sidebar: #ffffff;
+  --panel: #ffffff;
+  --panel-soft: #edf2f8;
+  --border: #dce4ef;
+  --muted: #65748b;
+  --text: #1c293b;
+  --accent: #2563eb;
+  --accent-bg: #e7efff;
+
+  --topbar: #ffffff;
+  --text-strong: #182538;
+  --text-secondary: #52627a;
+  --hover-bg: #eef3fa;
+  --active-bg: #e8f0ff;
+  --active-border: #c5d8ff;
+  --input-bg: #ffffff;
+  --card-shadow: 0 8px 24px rgb(25 45 75 / 6%);
 }
 
 * { box-sizing: border-box; }
@@ -460,4 +491,541 @@ h1 { margin: 12px 0 8px; font-size: clamp(26px,3vw,34px); line-height: 1.2; lett
   .audit-outcome {
     margin-left: 52px;
   }
+}
+.theme-select {
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.theme-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+body,
+.sidebar,
+.topbar,
+.panel,
+.card,
+.icon-button,
+input,
+select,
+textarea,
+button {
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  .sidebar,
+  .topbar,
+  .panel,
+  .card,
+  .icon-button,
+  input,
+  select,
+  textarea,
+  button {
+    transition: none;
+  }
+}
+
+/* Light mode refinements */
+:root[data-theme="light"] .brand {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .brand small {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .workspace-label {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .nav-item {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .nav-item:hover {
+  background: var(--hover-bg);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .nav-item.active {
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--accent);
+}
+
+:root[data-theme="light"] .topbar {
+  background: var(--topbar);
+}
+
+:root[data-theme="light"] .breadcrumb strong,
+:root[data-theme="light"] .profile-info strong {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .icon-button {
+  background: var(--panel);
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .security-card {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .security-card p,
+:root[data-theme="light"] .security-status {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .profile {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .profile-info span {
+  color: var(--muted);
+}
+
+/* ===== TrustVault Light Mode: dashboard refinements ===== */
+
+:root[data-theme="light"] .brand {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .topbar {
+  background: var(--topbar);
+}
+
+:root[data-theme="light"] .breadcrumb,
+:root[data-theme="light"] .subtitle,
+:root[data-theme="light"] .stat-top,
+:root[data-theme="light"] .panel-heading p,
+:root[data-theme="light"] .document-row,
+:root[data-theme="light"] .updated,
+:root[data-theme="light"] .mini-panel p {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .breadcrumb strong,
+:root[data-theme="light"] .stat-number,
+:root[data-theme="light"] .file-name strong,
+:root[data-theme="light"] .mini-title h3 {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .stat-foot,
+:root[data-theme="light"] .panel-footer,
+:root[data-theme="light"] .page-footer {
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .stat-foot {
+  border-top-color: var(--border);
+}
+
+:root[data-theme="light"] .table-head {
+  color: var(--text-secondary);
+  background: var(--panel-soft);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .document-row {
+  border-bottom-color: var(--border);
+}
+
+:root[data-theme="light"] .document-row:hover {
+  background: var(--hover-bg);
+}
+
+:root[data-theme="light"] .panel-footer {
+  background: var(--panel-soft);
+  border-top-color: var(--border);
+}
+
+:root[data-theme="light"] .search-box,
+:root[data-theme="light"] .filter-button {
+  color: var(--text-secondary);
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .search-box input {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .search-box input::placeholder {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .file-name small,
+:root[data-theme="light"] .empty-state {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .category-tag {
+  color: var(--text-secondary);
+  background: var(--panel-soft);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .mini-title h3 {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .share-panel {
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .share-form label {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .share-form input,
+:root[data-theme="light"] .share-form select {
+  color: var(--text);
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .security-card strong {
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .profile-info strong {
+  color: var(--text-strong);
+}
+
+/* Keep the existing blue action buttons readable */
+:root[data-theme="light"] .primary-button {
+  color: #ffffff;
+  background: #2563eb;
+}
+
+/* Authentication and reset-password screens */
+:root[data-theme="light"] .auth-page {
+  --page-bg: #f4f7fb;
+  --panel-bg: #ffffff;
+  background: radial-gradient(
+    ellipse at 15% 10%,
+    rgba(65, 100, 190, .09),
+    transparent 42%
+  ), var(--page-bg);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .auth-card {
+  background: var(--panel-bg);
+  border-color: var(--border);
+  box-shadow: var(--card-shadow);
+}
+
+:root[data-theme="light"] .auth-form input {
+  color: var(--text);
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .auth-switch button {
+  color: var(--accent);
+}
+
+/* TrustVault — Enterprise Slate Light Theme */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f1f5f9;
+  --sidebar: #f8fafc;
+  --panel: #ffffff;
+  --panel-soft: #f1f5f9;
+  --border: #dce4ef;
+
+  --muted: #64748b;
+  --text: #334155;
+  --text-strong: #0f172a;
+  --text-secondary: #475569;
+
+  --accent: #1d4ed8;
+  --accent-bg: #e8efff;
+  --topbar: #ffffff;
+
+  --hover-bg: #eaf0f8;
+  --active-bg: #e7efff;
+  --active-border: #c5d7ff;
+  --input-bg: #ffffff;
+
+  --card-shadow: 0 2px 5px rgb(15 23 42 / 3%);
+}
+
+/* Page structure */
+:root[data-theme="light"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .sidebar {
+  background: var(--sidebar);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .content {
+  background: var(--bg);
+}
+
+/* Brand and navigation */
+:root[data-theme="light"] .brand {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .brand small {
+  color: #64748b;
+}
+
+:root[data-theme="light"] .workspace-label {
+  color: #64748b;
+}
+
+:root[data-theme="light"] .nav-item {
+  color: #475569;
+  border-color: transparent;
+}
+
+:root[data-theme="light"] .nav-item:hover {
+  background: #eaf0f8;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .nav-item.active {
+  color: #1d4ed8;
+  background: #e7efff;
+  border-color: #c5d7ff;
+}
+
+:root[data-theme="light"] .nav-dot {
+  background: #2563eb;
+}
+
+/* Cards and panels */
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .mini-panel {
+  background: #ffffff;
+  border-color: #dce4ef;
+  box-shadow: 0 2px 5px rgb(15 23 42 / 3%);
+}
+
+:root[data-theme="light"] .stat-top {
+  color: #64748b;
+}
+
+:root[data-theme="light"] .stat-number {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .stat-foot {
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+:root[data-theme="light"] .panel-heading h2,
+:root[data-theme="light"] .mini-title h3 {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .panel-heading p,
+:root[data-theme="light"] .mini-panel p {
+  color: #64748b;
+}
+
+/* Search, filters and forms */
+:root[data-theme="light"] .search-box,
+:root[data-theme="light"] .filter-button,
+:root[data-theme="light"] .theme-select {
+  color: #334155;
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+:root[data-theme="light"] .search-box:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 10%);
+}
+
+:root[data-theme="light"] .search-box input {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .search-box input::placeholder {
+  color: #94a3b8;
+}
+
+/* Document table */
+:root[data-theme="light"] .table-head {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #dce4ef;
+}
+
+:root[data-theme="light"] .document-row {
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+:root[data-theme="light"] .document-row:hover {
+  background: #f8fafc;
+}
+
+:root[data-theme="light"] .file-name strong {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .file-name small,
+:root[data-theme="light"] .updated,
+:root[data-theme="light"] .empty-state {
+  color: #64748b;
+}
+
+:root[data-theme="light"] .category-tag {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #dce4ef;
+}
+
+:root[data-theme="light"] .panel-footer {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #dce4ef;
+}
+
+/* Buttons and links */
+:root[data-theme="light"] .primary-button {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgb(29 78 216 / 18%);
+}
+
+:root[data-theme="light"] .primary-button:hover {
+  background: #1e40af;
+}
+
+:root[data-theme="light"] .text-button,
+:root[data-theme="light"] .mini-link,
+:root[data-theme="light"] .panel-footer button {
+  color: #1d4ed8;
+}
+
+:root[data-theme="light"] .icon-button {
+  background: #ffffff;
+  color: #475569;
+  border-color: #dce4ef;
+}
+
+:root[data-theme="light"] .icon-button:hover {
+  background: #f1f5f9;
+}
+
+/* Sidebar security card */
+:root[data-theme="light"] .security-card {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #dce4ef;
+}
+
+:root[data-theme="light"] .security-card p,
+:root[data-theme="light"] .security-status {
+  color: #475569;
+}
+
+:root[data-theme="light"] .profile {
+  color: #475569;
+  border-color: #dce4ef;
+}
+
+:root[data-theme="light"] .profile-info strong {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .profile-info span {
+  color: #64748b;
+}
+
+/* Authentication and reset-password screens */
+:root[data-theme="light"] .auth-page {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .auth-card {
+  background: #ffffff;
+  border-color: #dce4ef;
+  box-shadow: 0 12px 36px rgb(15 23 42 / 7%);
+}
+
+:root[data-theme="light"] .auth-form input,
+:root[data-theme="light"] .share-form input,
+:root[data-theme="light"] .share-form select {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+:root[data-theme="light"] .auth-switch button {
+  color: #1d4ed8;
+}
+/* TrustVault professional brand typography */
+.brand {
+  font-family: "Manrope", sans-serif;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: var(--text-strong);
+}
+
+.brand small {
+  font-family: "Inter", sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Consistent typography across the workspace */
+body {
+  font-family: "Inter", sans-serif;
+}
+
+h1,
+h2,
+h3,
+.stat-number {
+  font-family: "Manrope", sans-serif;
+}
+.brand,
+.brand a,
+.brand:hover,
+.brand:focus,
+.brand:visited,
+.brand small {
+  text-decoration: none !important;
 }

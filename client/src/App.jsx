@@ -14,7 +14,7 @@ import {
   Clock3,
   ArrowUpRight,
 } from "lucide-react";
-
+import ResetPassword from "./components/ResetPassword";
 import AuthScreen from "./components/AuthScreen";
 import { authApi, documentsApi, adminApi } from "./services/api";
 
@@ -63,6 +63,47 @@ function formatTimestamp(date) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("trustvault-theme");
+    return ["light", "dark", "system"].includes(savedTheme)
+      ? savedTheme
+      : "dark";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+
+    const applyTheme = () => {
+      const isDark =
+        theme === "dark" ||
+        (theme === "system" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+      root.dataset.theme = isDark ? "dark" : "light";
+      root.style.colorScheme = isDark ? "dark" : "light";
+    };
+
+    applyTheme();
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    if (theme === "system") {
+      media.addEventListener("change", applyTheme);
+    }
+
+    return () => media.removeEventListener("change", applyTheme);
+  }, [theme]);
+
+  function changeTheme(nextTheme) {
+    setTheme(nextTheme);
+    localStorage.setItem("trustvault-theme", nextTheme);
+  }
+  const isResetPasswordPage =
+    window.location.pathname === "/reset-password";
+
+  if (isResetPasswordPage) {
+    return <ResetPassword />;
+  }
   const [activeNav, setActiveNav] = useState("Overview");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
@@ -352,7 +393,7 @@ export default function App() {
             <ShieldCheck size={23} />
           </span>
           <span>
-            trustvault
+            TrustVault
             <small>SECURE WORKSPACE</small>
           </span>
         </a>
@@ -427,6 +468,16 @@ export default function App() {
           </div>
 
           <div className="top-actions">
+            <select
+              className="theme-select"
+              aria-label="Choose appearance"
+              value={theme}
+              onChange={(event) => changeTheme(event.target.value)}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
             <span className="environment-pill">
               <span /> Connected
             </span>
@@ -718,11 +769,10 @@ export default function App() {
                       <div className="document-row" key={doc._id}>
                         <div className="file-name">
                           <span
-                            className={`file-icon ${
-                              doc.mimeType?.startsWith("image/")
-                                ? "image-file"
-                                : ""
-                            }`}
+                            className={`file-icon ${doc.mimeType?.startsWith("image/")
+                              ? "image-file"
+                              : ""
+                              }`}
                           >
                             {doc.mimeType?.startsWith("image/") ? (
                               <ImageIcon size={18} />
@@ -868,9 +918,8 @@ export default function App() {
                       </div>
 
                       <span
-                        className={`audit-outcome outcome-${
-                          event.outcome || "unknown"
-                        }`}
+                        className={`audit-outcome outcome-${event.outcome || "unknown"
+                          }`}
                       >
                         {event.outcome || "Unknown"}
                       </span>

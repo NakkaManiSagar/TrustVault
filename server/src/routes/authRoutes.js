@@ -1,13 +1,40 @@
-
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import User from "../models/User.js";
 import { requireAuth } from "../middleware/authenticate.js";
+import {
+  requestPasswordReset,
+  resetPassword,
+} from "../services/passwordResetService.js";
 
 const router = Router();
 
 const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 72;
 
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Too many password-reset requests. Please try again later.",
+  },
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Too many attempts. Please try again later.",
+  },
+});
+
+// Register
 router.post("/register", async (req, res, next) => {
   try {
     const { name, email, password } = req.body ?? {};
@@ -20,8 +47,8 @@ router.post("/register", async (req, res, next) => {
       email.length > 254 ||
       !validEmail.test(email.trim()) ||
       typeof password !== "string" ||
-      password.length < 12 ||
-      password.length > 72
+      password.length < PASSWORD_MIN_LENGTH ||
+      password.length > PASSWORD_MAX_LENGTH
     ) {
       return res.status(400).json({
         error: "Invalid registration details",
@@ -29,7 +56,6 @@ router.post("/register", async (req, res, next) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-
     const passwordHash = await bcrypt.hash(password, 12);
 
     try {
@@ -54,6 +80,7 @@ router.post("/register", async (req, res, next) => {
           error: "Unable to register with those details",
         });
       }
+
       throw error;
     }
   } catch (error) {
@@ -61,6 +88,7 @@ router.post("/register", async (req, res, next) => {
   }
 });
 
+// Login
 router.post("/login", async (req, res, next) => {
   try {
     const { email, password } = req.body ?? {};
@@ -69,7 +97,7 @@ router.post("/login", async (req, res, next) => {
       typeof email !== "string" ||
       email.length > 254 ||
       typeof password !== "string" ||
-      password.length > 72
+      password.length > PASSWORD_MAX_LENGTH
     ) {
       return res.status(400).json({
         error: "Invalid email or password",
@@ -90,7 +118,7 @@ router.post("/login", async (req, res, next) => {
       });
     }
 
-    // Prevent session fixation by replacing the session ID at login.
+    // Replace the session ID to prevent session fixation.
     req.session.regenerate((error) => {
       if (error) return next(error);
 
@@ -114,6 +142,88 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
+// Request a password-reset email
+router.post(
+  "/forgot-password",
+  forgotPasswordLimiter,
+  async (req, res, next) => {
+    try {
+      const { email } = req.body ?? {};
+
+      if (
+        typeof email !== "string" ||
+        email.length > 254 ||
+        !validEmail.test(email.trim())
+      ) {
+        return res.status(400).json({
+          error: "Enter a valid email address",
+        });
+      }
+
+      const result = await requestPasswordReset(email);
+
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Set a new password using the emailed token
+router.post(
+  "/reset-password",
+  resetPasswordLimiter,
+  async (req, res, next) => {
+    try {
+      const { token, password } = req.body ?? {};
+
+      if (
+        typeof token !== "string" ||
+        typeof password !== "string" ||
+        password.length < PASSWORD_MIN_LENGTH ||
+        password.length > PASSWORD_MAX_LENGTH
+      ) {
+        return res.status(400).json({
+          error: "Invalid reset request",
+        });
+      }
+
+      const success = await resetPassword(token, password);
+
+      if (!success) {
+        return res.status(400).json({
+          error: "Invalid or expired reset link. Please request a new one.",
+        });
+      }
+
+      // Destroy the current session if one exists.
+      if (req.session) {
+        return req.session.destroy((error) => {
+          if (error) return next(error);
+
+          res.clearCookie("trustvault.sid", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            path: "/",
+          });
+
+          return res.status(200).json({
+            message: "Password reset successful. Please log in with your new password.",
+          });
+        });
+      }
+
+      return res.status(200).json({
+        message: "Password reset successful. Please log in with your new password.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Logout
 router.post("/logout", (req, res, next) => {
   if (!req.session) {
     return res.status(204).end();
@@ -129,10 +239,11 @@ router.post("/logout", (req, res, next) => {
       path: "/",
     });
 
-    res.status(204).end();
+    return res.status(204).end();
   });
 });
 
+// Get current user
 router.get("/me", requireAuth, (req, res) => {
   res.json({
     user: {

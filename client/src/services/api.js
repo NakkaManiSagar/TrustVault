@@ -1,4 +1,5 @@
-﻿const API_BASE_URL =
+﻿
+const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export async function apiRequest(path, options = {}) {
@@ -29,6 +30,7 @@ export async function apiRequest(path, options = {}) {
   return data;
 }
 
+// Authentication and password recovery
 export const authApi = {
   login: (email, password) =>
     apiRequest("/api/auth/login", {
@@ -45,27 +47,53 @@ export const authApi = {
   me: () => apiRequest("/api/auth/me"),
 
   logout: () =>
-    apiRequest("/api/auth/logout", { method: "POST" }),
+    apiRequest("/api/auth/logout", {
+      method: "POST",
+    }),
+
+  forgotPassword: (email) =>
+    apiRequest("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token, password) =>
+    apiRequest("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
 };
 
+// Document management
 export const documentsApi = {
   list: (filters = {}) => {
     const params = new URLSearchParams();
 
     for (const [key, value] of Object.entries(filters)) {
-      if (value) params.set(key, value);
+      if (value) {
+        params.set(key, value);
+      }
     }
 
     const query = params.toString();
-    return apiRequest(`/api/documents/${query ? `?${query}` : ""}`);
+
+    return apiRequest(
+      `/api/documents/${query ? `?${query}` : ""}`
+    );
   },
 
   upload: (file, metadata = {}) => {
     const formData = new FormData();
     formData.append("file", file);
 
-    if (metadata.title) formData.append("title", metadata.title);
-    if (metadata.category) formData.append("category", metadata.category);
+    if (metadata.title) {
+      formData.append("title", metadata.title);
+    }
+
+    if (metadata.category) {
+      formData.append("category", metadata.category);
+    }
+
     if (metadata.description) {
       formData.append("description", metadata.description);
     }
@@ -78,8 +106,12 @@ export const documentsApi = {
 
   download: async (documentId) => {
     const response = await fetch(
-      `${API_BASE_URL}/api/documents/${encodeURIComponent(documentId)}/download`,
-      { credentials: "include" }
+      `${API_BASE_URL}/api/documents/${encodeURIComponent(
+        documentId
+      )}/download`,
+      {
+        credentials: "include",
+      }
     );
 
     if (!response.ok) {
@@ -99,13 +131,18 @@ export const documentsApi = {
   },
 
   update: (documentId, metadata) =>
-    apiRequest(`/api/documents/${encodeURIComponent(documentId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(metadata),
-    }),
+    apiRequest(
+      `/api/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(metadata),
+      }
+    ),
 
   permissions: (documentId) =>
-    apiRequest(`/api/documents/${encodeURIComponent(documentId)}/permissions`),
+    apiRequest(
+      `/api/documents/${encodeURIComponent(documentId)}/permissions`
+    ),
 
   share: (documentId, email, permission) =>
     apiRequest(
@@ -118,31 +155,47 @@ export const documentsApi = {
 
   revoke: (documentId, userId) =>
     apiRequest(
-      `/api/documents/${encodeURIComponent(documentId)}/permissions/${encodeURIComponent(userId)}`,
-      { method: "DELETE" }
+      `/api/documents/${encodeURIComponent(
+        documentId
+      )}/permissions/${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+      }
     ),
 
   remove: (documentId) =>
-    apiRequest(`/api/documents/${encodeURIComponent(documentId)}`, {
-      method: "DELETE",
-    }),
+    apiRequest(
+      `/api/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: "DELETE",
+      }
+    ),
 };
 
+// Administrator APIs
 export const adminApi = {
   audit: (filters = {}) => {
     const params = new URLSearchParams();
 
     for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== null && value !== "") {
+      if (
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+      ) {
         params.set(key, String(value));
       }
     }
 
     const query = params.toString();
-    return apiRequest(`/api/admin/audit${query ? `?${query}` : ""}`);
+
+    return apiRequest(
+      `/api/admin/audit${query ? `?${query}` : ""}`
+    );
   },
 };
 
+// Health check
 export const healthApi = {
   check: () => apiRequest("/api/health"),
 };
