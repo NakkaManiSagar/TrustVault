@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const auditLogSchema = new mongoose.Schema(
@@ -55,6 +54,12 @@ const auditLogSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    sequence: {
+      type: Number,
+      min: 1,
+      immutable: true,
+      select: false,
+    },
     previousHash: {
       type: String,
       default: "",
@@ -69,12 +74,19 @@ const auditLogSchema = new mongoose.Schema(
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
 
 auditLogSchema.index({ createdAt: -1 });
 auditLogSchema.index({ actor: 1, createdAt: -1 });
 auditLogSchema.index({ action: 1, createdAt: -1 });
 auditLogSchema.index({ resourceId: 1, createdAt: -1 });
+auditLogSchema.index(
+  { sequence: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sequence: { $type: "number" } },
+  }
+);
 
 export default mongoose.model("AuditLog", auditLogSchema);

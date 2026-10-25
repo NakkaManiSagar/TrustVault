@@ -1,8 +1,11 @@
 
 import { createHash } from "node:crypto";
+import mongoose from "mongoose";
 import AuditLog from "../models/AuditLog.js";
+import AuditChainState from "../models/AuditChainState.js";
 
-// Sort object keys so the same event always produces the same JSON.
+const STATE_ID = "global";
+
 function stableValue(value) {
   if (value instanceof Date) return value.toISOString();
 
@@ -11,7 +14,6 @@ function stableValue(value) {
   }
 
   if (value && typeof value === "object") {
-    // Normalize Mongoose ObjectIds and other BSON identifiers.
     if (typeof value.toHexString === "function") {
       return value.toHexString();
     }
@@ -51,11 +53,47 @@ function calculateHash(previousHash, event) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-// Serialize writes within this Node.js process to avoid competing
-// requests appending to the same previous hash simultaneously.
-let writeQueue = Promise.resolve();
+async function ensureChainState() {
+  let state = await AuditChainState.findById(STATE_ID).lean();
 
-export function createAuditLog({
+  if (state) return state;
+
+  // Never silently start a new chain over existing audit history.
+  const existingEntries = await AuditLog.countDocuments();
+
+  if (existingEntries > 0) {
+    throw new Error(
+      "Audit chain state is missing while audit entries exist. " +
+        "Verify and migrate the legacy audit chain before writing."
+    );
+  }
+
+  try {
+    await AuditChainState.updateOne(
+      { _id: STATE_ID },
+      {
+        $setOnInsert: {
+          sequence: 0,
+          lastHash: "",
+        },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    // Another instance may have initialized the shared state first.
+    if (error?.code !== 11000) throw error;
+  }
+
+  state = await AuditChainState.findById(STATE_ID).lean();
+
+  if (!state) {
+    throw new Error("Unable to initialize audit chain state");
+  }
+
+  return state;
+}
+
+export async function createAuditLog({
   actor = null,
   action,
   resourceType = "document",
@@ -65,61 +103,153 @@ export function createAuditLog({
   userAgent = "",
   details = {},
 }) {
-  const operation = writeQueue.then(async () => {
-    const previous = await AuditLog.findOne()
-      .sort({ createdAt: -1, _id: -1 })
-      .select("+previousHash +entryHash")
-      .lean();
+  await ensureChainState();
 
-    const previousHash = previous?.entryHash ?? "";
+  const session = await mongoose.startSession();
+  let result;
 
-    const now = Date.now();
-    const previousTime = previous?.createdAt
-      ? new Date(previous.createdAt).getTime()
-      : 0;
+  try {
+    await session.withTransaction(async () => {
+      const state = await AuditChainState.findById(STATE_ID)
+        .session(session)
+        .lean();
 
-    // Keep timestamps strictly increasing within this process.
-    const createdAt = new Date(Math.max(now, previousTime + 1));
+      if (!state) {
+        throw new Error("Audit chain state is missing");
+      }
 
-    const event = {
-      actor,
-      action,
-      resourceType,
-      resourceId,
-      outcome,
-      ipAddress,
-      userAgent,
-      details,
-      createdAt,
-    };
+      const sequence = state.sequence + 1;
+      const createdAt = new Date();
 
-    const entryHash = calculateHash(previousHash, event);
+      const event = {
+        actor,
+        action,
+        resourceType,
+        resourceId,
+        outcome,
+        ipAddress,
+        userAgent,
+        details,
+        sequence,
+        createdAt,
+      };
 
-    return AuditLog.create({
-      ...event,
-      previousHash,
-      entryHash,
-      createdAt,
-      updatedAt: createdAt,
+      const entryHash = calculateHash(state.lastHash, event);
+
+      // The state update and entry insert commit or abort together.
+      const updated = await AuditChainState.updateOne(
+        {
+          _id: STATE_ID,
+          sequence: state.sequence,
+          lastHash: state.lastHash,
+        },
+        {
+          $set: {
+            sequence,
+            lastHash: entryHash,
+          },
+        },
+        { session }
+      );
+
+      if (updated.modifiedCount !== 1) {
+        throw new Error("Audit chain state changed; retry the transaction");
+      }
+
+      const [entry] = await AuditLog.create(
+        [
+          {
+            ...event,
+            previousHash: state.lastHash,
+            entryHash,
+            updatedAt: createdAt,
+          },
+        ],
+        { session }
+      );
+
+      result = entry;
     });
-  });
+  } finally {
+    await session.endSession();
+  }
 
-  // Keep the queue usable after an individual write fails.
-  writeQueue = operation.catch(() => {});
-
-  return operation;
+  return result;
 }
 
 export async function verifyAuditChain() {
   const entries = await AuditLog.find()
-    .select("+previousHash +entryHash")
-    .sort({ createdAt: 1, _id: 1 })
+    .select("+sequence +previousHash +entryHash")
+    .sort({ sequence: 1, createdAt: 1, _id: 1 })
     .lean();
+
+  const numbered = entries.filter(
+    (entry) => Number.isInteger(entry.sequence)
+  );
+
+  // Preserve verification of an entirely legacy chain.
+  if (numbered.length === 0) {
+    let expectedPreviousHash = "";
+
+    const legacyEntries = await AuditLog.find()
+      .select("+previousHash +entryHash")
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+
+    for (let index = 0; index < legacyEntries.length; index += 1) {
+      const entry = legacyEntries[index];
+
+      if (entry.previousHash !== expectedPreviousHash) {
+        return {
+          valid: false,
+          checked: index,
+          invalidEntryId: String(entry._id),
+          reason: "Previous hash does not match",
+        };
+      }
+
+      if (
+        entry.entryHash !== calculateHash(entry.previousHash, entry)
+      ) {
+        return {
+          valid: false,
+          checked: index,
+          invalidEntryId: String(entry._id),
+          reason: "Entry hash does not match",
+        };
+      }
+
+      expectedPreviousHash = entry.entryHash;
+    }
+
+    return {
+      valid: true,
+      checked: legacyEntries.length,
+      legacy: true,
+    };
+  }
+
+  if (numbered.length !== entries.length) {
+    return {
+      valid: false,
+      checked: 0,
+      reason: "Mixed legacy and numbered audit entries",
+    };
+  }
 
   let expectedPreviousHash = "";
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
+
+    if (entry.sequence !== index + 1) {
+      return {
+        valid: false,
+        checked: index,
+        invalidEntryId: String(entry._id),
+        reason: "Audit sequence is missing or out of order",
+      };
+    }
 
     if (entry.previousHash !== expectedPreviousHash) {
       return {
@@ -130,12 +260,7 @@ export async function verifyAuditChain() {
       };
     }
 
-    const expectedHash = calculateHash(
-      entry.previousHash,
-      entry
-    );
-
-    if (entry.entryHash !== expectedHash) {
+    if (entry.entryHash !== calculateHash(entry.previousHash, entry)) {
       return {
         valid: false,
         checked: index,
@@ -147,8 +272,24 @@ export async function verifyAuditChain() {
     expectedPreviousHash = entry.entryHash;
   }
 
+  const state = await AuditChainState.findById(STATE_ID).lean();
+
+  if (
+    entries.length > 0 &&
+    (!state ||
+      state.sequence !== entries.length ||
+      state.lastHash !== expectedPreviousHash)
+  ) {
+    return {
+      valid: false,
+      checked: entries.length,
+      reason: "Audit chain state does not match the audit entries",
+    };
+  }
+
   return {
     valid: true,
     checked: entries.length,
+    legacy: false,
   };
 }
